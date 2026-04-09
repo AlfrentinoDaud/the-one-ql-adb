@@ -1,0 +1,68 @@
+#===========================================================================
+# SCENARIO CONFIGURATION
+#===========================================================================
+alpha = 0.5 
+width = 5000
+height = 5000
+[ Scenario ]
+Scenario.name = LevyWalkTest
+Scenario.simulateConnections = true
+Scenario.updateInterval = 1
+Scenario.endTime = 1000k
+Scenario.nrofHostGroups = 3
+
+#===========================================================================
+# MOVEMENT MODEL SETTINGS
+#===========================================================================
+[ LevyWalkMovement settings ]
+LevyWalkMovement.alpha = 0.5  # Default value
+LevyWalkMovement.width = 5000
+LevyWalkMovement.height = 5000
+
+[ Movement model settings ]
+MovementModel.rngSeed = 0
+MovementModel.worldSize = 5000, 5000
+MovementModel.warmup = 1000
+
+#===========================================================================
+# GROUP SETTINGS
+#===========================================================================
+[ Common settings ]
+Group.movementModel = LevyWalkMovement
+Group.router = EpidemicRouter
+Group.bufferSize = 100M
+Group.transmitRange = 10
+Group.transmitSpeed = 100k
+Group.waitTime = 0, 0
+Group.speed = 10.0, 10.0
+Group.msgTtl = 1433
+Group.width = 5000
+Group.height = 5000 
+
+[ Group 1 ]
+Group1.groupID = A
+Group1.nrofHosts = 1
+Group1.LevyWalkMovement.alpha = 0.5
+Group1.alpha = 0.5 
+Group1.pathColor = #ff5733
+
+[ Group 2 ]
+Group2.groupID = B
+Group2.nrofHosts = 1
+Group2.LevyWalkMovement.alpha = 1.5
+Group2.alpha = 1.5 
+Group2.pathColor = #3fff33
+
+[ Group 3 ]
+Group3.groupID = C
+Group3.nrofHosts = 1
+Group3.LevyWalkMovement.alpha = 2.5
+Group3.alpha = 2.5
+Group3.pathColor = #3380ff
+
+#===========================================================================
+# LAYANAN DAN REPORT
+#===========================================================================
+[ Reports ]
+Report.nrofReports = 1
+Report.report1 = InterContactTimesReport

@@ -1,7 +1,3 @@
-
-/*
- * Bubble Rap (by Antok)
- */
 package routing.community;
 
 import java.util.*;
@@ -10,9 +6,15 @@ import core.*;
 import routing.DecisionEngineRouter;
 import routing.MessageRouter;
 import routing.RoutingDecisionEngine;
+import routing.community.AverageWinCentrality1;
+import routing.community.Centrality;
+import routing.community.CommunityDetection;
+import routing.community.CommunityDetectionEngine;
+import routing.community.Duration;
+import routing.community.SimpleCommunityDetection;
 
-public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngine {
-
+// tambahkan interface CentralityDetectionEngine (buat sendiri, method 1) terinspirasi dari CommunityDetectionEngine
+public class BubbleRapUts implements RoutingDecisionEngine, CommunityDetectionEngine, CentralityDetectionEngine {
     // Start-initialisation
     public static final String COMMUNITY_ALG_SETTING = "communityDetectAlg"; // added
     public static final String CENTRALITY_ALG_SETTING = "centralityAlg";
@@ -21,11 +23,11 @@ public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngin
     protected Map<DTNHost, List<Duration>> connHistory;
 
     protected CommunityDetection community; // added
-    protected Centrality centrality;
+    protected CentralityKu centrality;
 
     // End-initialisation
     // Constructor based on the settings
-    public BubbleRap(Settings s) {
+    public BubbleRapUts(Settings s) {
         if (s.contains(COMMUNITY_ALG_SETTING)) // added
         {
             this.community = (CommunityDetection) s.createIntializedObject(s.getSetting(COMMUNITY_ALG_SETTING));
@@ -34,14 +36,15 @@ public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngin
         }
 
         if (s.contains(CENTRALITY_ALG_SETTING)) {
-            this.centrality = (Centrality) s.createIntializedObject(s.getSetting(CENTRALITY_ALG_SETTING));
-        } else {
-            this.centrality = new AverageWinCentrality1(s);
+            this.centrality = (CentralityKu) s.createIntializedObject(s.getSetting(CENTRALITY_ALG_SETTING));
         }
+        // else {
+        // this.centrality = new AverageWinCentrality1(s);
+        // }
     }
 
     // Constructor based on the argument prototype
-    public BubbleRap(BubbleRap proto) {
+    public BubbleRapUts(BubbleRapUts proto) {
         this.community = proto.community.replicate(); // added
         this.centrality = proto.centrality.replicate();
         startTimestamps = new HashMap<DTNHost, Double>();
@@ -54,7 +57,7 @@ public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngin
     @Override
     public void doExchangeForNewConnection(Connection con, DTNHost peer) {
         DTNHost myHost = con.getOtherNode(peer);
-        BubbleRap de = this.getOtherDecisionEngine(peer);
+        BubbleRapUts de = this.getOtherDecisionEngine(peer);
 
         this.startTimestamps.put(peer, SimClock.getTime());
         de.startTimestamps.put(myHost, SimClock.getTime());
@@ -118,7 +121,7 @@ public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngin
         }
         // now we decide where to forward a message to relay node
         DTNHost dest = m.getTo();
-        BubbleRap de = getOtherDecisionEngine(otherHost);
+        BubbleRapUts de = getOtherDecisionEngine(otherHost);
 
         boolean peerInCommunity = de.commumesWithHost(dest); // Is peer in dest'community
         boolean meInCommunity = this.commumesWithHost(dest); // Is THIS in dest'community
@@ -148,7 +151,7 @@ public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngin
     public boolean shouldDeleteSentMessage(Message m, DTNHost otherHost) {
         // delete the message once it is forwarded to the node in the dest'community
 
-        BubbleRap de = this.getOtherDecisionEngine(otherHost);
+        BubbleRapUts de = this.getOtherDecisionEngine(otherHost);
         return de.commumesWithHost(m.getTo())
                 && !this.commumesWithHost(m.getTo());
     }
@@ -164,7 +167,7 @@ public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngin
 
     @Override
     public RoutingDecisionEngine replicate() {
-        return new BubbleRap(this);
+        return new BubbleRapUts(this);
     }
 
     protected boolean commumesWithHost(DTNHost h) {
@@ -179,12 +182,12 @@ public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngin
         return this.centrality.getGlobalCentrality(connHistory);
     }
 
-    private BubbleRap getOtherDecisionEngine(DTNHost h) {
+    private BubbleRapUts getOtherDecisionEngine(DTNHost h) {
         MessageRouter otherRouter = h.getRouter();
         assert otherRouter instanceof DecisionEngineRouter : "This router only works "
                 + " with other routers of same type";
 
-        return (BubbleRap) ((DecisionEngineRouter) otherRouter).getDecisionEngine();
+        return (BubbleRapUts) ((DecisionEngineRouter) otherRouter).getDecisionEngine();
     }
 
     // for REPORT purpose: CommunityDetectionReport
@@ -193,29 +196,21 @@ public class BubbleRap implements RoutingDecisionEngine, CommunityDetectionEngin
         return this.community.getLocalCommunity();
     }
 
-    // private Set<String> encounteredNodes = new HashSet<>();
-    // private double lastResetTime = 0;
-    // private static final double RESET_INTERVAL = 24 * 60 * 60; // 24 jam (detik)
-
     @Override
     public void update(DTNHost thisHost) {
-        // double currentTime = SimClock.getTime();
-
-        // // Reset setiap 24 jam simulasi
-        // if (currentTime - lastResetTime >= RESET_INTERVAL) {
-        // System.out.println("Node " + thisHost.getAddress() +
-        // " encountered " + encounteredNodes.size() + " unique nodes in the last
-        // 24h.");
-
-        // encounteredNodes.clear();
-        // lastResetTime = currentTime;
-        // }
-
-        // // Tambahkan node-node yang saat ini terkoneksi
-        // for (Connection con : thisHost.getConnections()) {
-        // DTNHost other = con.getOtherNode(thisHost);
-        // encounteredNodes.add(other.getAddress());
-        // }
     }
 
+    protected int[] getGlobalArrayCentrality() {
+        return this.centrality.getArrayCentrality(connHistory);
+    }
+
+    // // public int [] getArrayCentrality();
+    // protected int[] getGlobalArrayCentralityTag() {
+    // return getGlobalArrayCentrality();
+    // }
+
+    @Override
+    public int[] getArrayCentrality() {
+        return getGlobalArrayCentrality();
+    }
 }

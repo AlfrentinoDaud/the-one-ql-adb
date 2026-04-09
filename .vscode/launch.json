@@ -5,10 +5,17 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "type": "java",
+      "name": "DTNSim",
+      "request": "launch",
+      "mainClass": "core.DTNSim",
+      "projectName": "Clone_e8100a64"
+    },
+    {
       "type": "node",
       "name": "build and run",
       "request": "launch",
-      "preLaunchTask": "build_and_run", // The name of the task defined above
+      "preLaunchTask": "build_and_run"
     }
   ],
 }
