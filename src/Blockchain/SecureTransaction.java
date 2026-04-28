@@ -3,85 +3,197 @@ package Blockchain;
 import java.security.*;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
+/**
+ * Class SecureTransaction berisi semua fungsi kriptografi
+ * yang digunakan dalam sistem blockchain reward DTN.
+ * 
+ * Fungsinya meliputi:
+ * - Hash SHA256
+ * - Digital signature (ECDSA)
+ * - Verifikasi signature
+ * - Commutative Encryption (sesuai paper)
+ */
 public class SecureTransaction {
 
+    /**
+     * Static block untuk memastikan provider kriptografi
+     * Bouncy Castle sudah terdaftar sebelum digunakan.
+     */
     static {
         Security.addProvider(new BouncyCastleProvider());
     }
 
     /**
-     * Bikin hash SHA-256 dari input (buat hash transaksi)
+     * Fungsi untuk membuat hash SHA-256
+     * Biasanya digunakan untuk:
+     * - ID transaksi
+     * - Hash block
+     * - Hash secret (R1, R2)
      * 
-     * @param input - Data yang mau di-hash
-     * @return Hash dalam bentuk hex string
+     * @param input data yang ingin di-hash
+     * @return hash dalam bentuk string hexadecimal
      */
-    public static String applySha256(String input) {
+    public static String sha256(String input) {
+
         try {
+
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
             byte[] hash = digest.digest(input.getBytes("UTF-8"));
+
             StringBuilder hexString = new StringBuilder();
+
             for (byte b : hash) {
+
                 String hex = Integer.toHexString(0xff & b);
+
                 if (hex.length() == 1)
                     hexString.append('0');
+
                 hexString.append(hex);
             }
+
             return hexString.toString();
+
         } catch (Exception e) {
+
             throw new RuntimeException(e);
+
         }
     }
 
+    public static String applySha256(String input) {
+        return sha256(input);
+    }
+
     /**
-     * Bikin tanda tangan digital pake private key
+     * Fungsi untuk menandatangani data menggunakan
+     * private key (digital signature).
      * 
-     * @param privateKey Kunci pribadi si pengirim
-     * @param input      Data yang mau ditandatangani
-     * @return Tanda tangan dalam bentuk byte array
+     * Digunakan agar transaksi tidak bisa dipalsukan.
+     *
+     * @param privateKey kunci privat pemilik wallet
+     * @param data       data yang ingin ditandatangani
+     * @return signature dalam bentuk byte[]
      */
-    public static byte[] applyECDSASig(PrivateKey privateKey, String input) {
+    public static byte[] sign(PrivateKey privateKey,
+            String data) {
+
         try {
-            Signature dsa = Signature.getInstance("ECDSA", "BC");
-            dsa.initSign(privateKey);
-            dsa.update(input.getBytes());
-            return dsa.sign();
+
+            Signature signature = Signature.getInstance("ECDSA", "BC");
+
+            signature.initSign(privateKey);
+
+            signature.update(data.getBytes());
+
+            return signature.sign();
+
         } catch (Exception e) {
+
             throw new RuntimeException(e);
+
         }
     }
 
     /**
-     * Mengecek apakah tanda tangan valid pakai public key
+     * Fungsi untuk memverifikasi signature transaksi.
      * 
-     * @param publicKey Kunci publik si pengirim
-     * @param data      Data asli yang ditandatangani
-     * @param signature Tanda tangan yang mau dicek
-     * @return true kalo tanda tangan valid
+     * Digunakan oleh miner untuk memastikan bahwa
+     * transaksi benar-benar dibuat oleh pengirimnya.
+     *
+     * @param publicKey public key pengirim
+     * @param data      data asli
+     * @param signature signature yang diberikan
+     * @return true jika signature valid
      */
-    public static boolean verifyECDSASig(PublicKey publicKey, String data, byte[] signature) {
+    public static boolean verify(PublicKey publicKey,
+            String data,
+            byte[] signature) {
+
         try {
-            Signature ecdsaVerify = Signature.getInstance("ECDSA", "BC");
-            ecdsaVerify.initVerify(publicKey);
-            ecdsaVerify.update(data.getBytes());
-            return ecdsaVerify.verify(signature);
+
+            Signature verifier = Signature.getInstance("ECDSA", "BC");
+
+            verifier.initVerify(publicKey);
+
+            verifier.update(data.getBytes());
+
+            return verifier.verify(signature);
+
         } catch (Exception e) {
+
             throw new RuntimeException(e);
+
         }
     }
 
     /**
-     * Mengubah key (public/private) jadi string biar gampang disimpen
-     * menggunakan Base64
-     * 
-     * @param key Kunci Publik atau Kunci Private
-     * @return
+     * Mengubah key menjadi string agar mudah disimpan
+     * atau dijadikan bagian dari hash.
+     *
+     * @param key public/private key
+     * @return string Base64
      */
-    public static String getStringFromKey(Key key) {
-        return java.util.Base64.getEncoder().encodeToString(key.getEncoded());
+    public static String keyToString(Key key) {
+
+        return java.util.Base64.getEncoder()
+                .encodeToString(key.getEncoded());
     }
 
-    //simulasi commutative encryption
-    public static String encrypt(PublicKey key, String data) {
-        return applySha256(getStringFromKey(key) + data);
+    /*
+     * =====================================================
+     * COMMUTATIVE ENCRYPTION (SIMULASI)
+     * =====================================================
+     */
+
+    /**
+     * Fungsi ini mensimulasikan commutative encryption
+     * seperti yang digunakan pada paper.
+     *
+     * Sifat commutative:
+     * Encrypt(A, Encrypt(B, M)) =
+     * Encrypt(B, Encrypt(A, M))
+     *
+     * Artinya urutan enkripsi tidak mempengaruhi hasil.
+     *
+     * @param key  public key node
+     * @param data data yang dienkripsi
+     * @return encrypted string
+     */
+    public static String commutativeEncrypt(PublicKey key,
+            String data) {
+
+        String keyString = keyToString(key);
+
+        String combined;
+
+        /*
+         * Sorting sederhana agar hasil hash selalu sama
+         * meskipun urutan kunci berbeda
+         */
+        if (keyString.compareTo(data) < 0)
+            combined = keyString + data;
+        else
+            combined = data + keyString;
+
+        return sha256(combined);
+    }
+
+    /**
+     * Enkripsi dua lapis (double encryption)
+     * Digunakan ketika message melewati dua node.
+     *
+     * @param k1   public key node pertama
+     * @param k2   public key node kedua
+     * @param data data asli
+     */
+    public static String doubleEncrypt(PublicKey k1,
+            PublicKey k2,
+            String data) {
+
+        String first = commutativeEncrypt(k1, data);
+
+        return commutativeEncrypt(k2, first);
     }
 }

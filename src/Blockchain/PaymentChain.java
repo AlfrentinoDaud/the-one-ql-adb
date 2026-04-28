@@ -1,96 +1,204 @@
 package Blockchain;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+import java.util.*;
 import core.DTNHost;
 
+/**
+ * Class PaymentChain mengelola seluruh transaksi
+ * yang terjadi selama message melewati beberapa hop.
+ * 
+ * Setiap message memiliki satu chain transaksi.
+ */
 public class PaymentChain {
 
+    /**
+     * Map untuk menyimpan chain transaksi
+     * key = messageID
+     */
     private Map<String, List<Payment>> chains = new HashMap<>();
 
+    /**
+     * Registry untuk mengetahui node tujuan message
+     */
+    private DestinationRegistry registry;
+
+    /**
+     * Reward relay
+     */
     private double alpha;
+
+    /**
+     * Reward receiver
+     */
     private double beta;
+
+    /**
+     * Jumlah hop maksimum
+     */
     private int maxHop;
 
-    public PaymentChain(double alpha, double beta, int maxHop) {
+    private WalletRegistry walletRegistry;
+
+    /**
+     * Constructor PaymentChain
+     */
+    public PaymentChain(double alpha,
+            double beta,
+            int maxHop,
+            DestinationRegistry reg,
+            WalletRegistry walletRegistry) {
+
         this.alpha = alpha;
         this.beta = beta;
         this.maxHop = maxHop;
+        this.registry = reg;
+        this.walletRegistry = walletRegistry;
     }
 
+    public PaymentChain(double alpha,
+            double beta,
+            int maxHop) {
+
+        this.alpha = alpha;
+        this.beta = beta;
+        this.maxHop = maxHop;
+
+        this.registry = new DestinationRegistry();
+        this.walletRegistry = new WalletRegistry();
+    }
+
+    /**
+     * Fungsi dipanggil setiap kali message
+     * berpindah dari satu node ke node lain.
+     *
+     * @param msgId ID message
+     * @param from  node pengirim
+     * @param to    node penerima
+     */
     public Payment addHop(String msgId,
             DTNHost from,
             DTNHost to,
             String R1,
             String R2) {
 
-        List<Payment> chain = chains.getOrDefault(msgId, new ArrayList<>());
+        /*
+         * Ambil chain transaksi message
+         */
+        List<Payment> chain = chains.computeIfAbsent(
+                msgId,
+                k -> new ArrayList<>());
 
-        Payment prev = chain.isEmpty()
-                ? null
-                : chain.get(chain.size() - 1);
+        int hop = chain.size();
 
-        int hopIndex = chain.size();
+        /*
+         * Hitung reward relay
+         */
+        double value = reward(hop);
 
-        double value = calculateReward(hopIndex);
+        String prevHash;
 
-        Payment p = new Payment(
-                from.getWallet().getPublicKey(),
-                to.getWallet().getPublicKey(),
+        if (chain.isEmpty()) {
+            prevHash = "GENESIS";
+        } else {
+            prevHash = chain.get(chain.size() - 1).getTxHash();
+        }
+
+        Payment payment = new Payment(
+                walletRegistry.getWallet(from).getPublicKey(),
+                walletRegistry.getWallet(to).getPublicKey(),
                 value,
-                prev == null ? null : prev.getPrevTxHash());
+                prevHash);
 
-        // ========================
-        // R1 hanya di hop pertama
-        // ========================
-        if (hopIndex == 0) {
-            p.setEncR1(SecureTransaction.encrypt(
-                    to.getWallet().getPublicKey(), R1));
+        /*
+         * Jika hop pertama
+         * maka sertakan bukti R1
+         */
+        if (hop == 0) {
+
+            payment.setEncR1(
+                    SecureTransaction.commutativeEncrypt(
+                            walletRegistry.getWallet(to).getPublicKey(),
+                            R1));
         }
 
-        // ========================
-        // ACK semua hop
-        // ========================
+        /*
+         * ACK dari relay
+         */
         String ack = "ACK_" + msgId + "_" + to;
-        p.setEncAck(SecureTransaction.encrypt(
-                to.getWallet().getPublicKey(), ack));
 
-        // ========================
-        // R2 hanya di receiver
-        // ========================
-        if (to.equals(getDestination(msgId))) {
-            p.setEncR2(SecureTransaction.encrypt(
-                    to.getWallet().getPublicKey(), R2));
+        payment.setEncAck(
+                SecureTransaction
+                        .commutativeEncrypt(
+                                walletRegistry.getWallet(to).getPublicKey(),
+                                ack));
+
+        /*
+         * Jika node ini adalah destination
+         * maka tambahkan proof R2
+         */
+        DTNHost dest = registry.get(msgId);
+
+        if (dest != null &&
+                to.equals(dest)) {
+
+            payment.setEncR2(
+                    SecureTransaction
+                            .commutativeEncrypt(
+                                    walletRegistry.getWallet(to).getPublicKey(),
+                                    R2));
         }
 
-        p.sign(from.getWallet().getPrivateKey());
+        /*
+         * Sender menandatangani transaksi
+         */
+        payment.sign(
+                walletRegistry
+                        .getWallet(from)
+                        .getPrivateKey());
 
-        chain.add(p);
+        chain.add(payment);
+
         chains.put(msgId, chain);
 
-        return p;
+        return payment;
     }
 
-    private double calculateReward(int hopIndex) {
+    /**
+     * Rumus reward sesuai paper
+     */
+    private double reward(int hop) {
+
+        if (hop >= maxHop)
+            return beta;
 
         double alphaPrime = alpha / (maxHop - 1);
 
-        if (hopIndex == maxHop - 1) {
+        if (hop == maxHop - 1)
             return beta;
-        }
 
-        return (maxHop - 1 - hopIndex) * alphaPrime + beta;
+        return (maxHop - 1 - hop) * alphaPrime + beta;
+        // double alphaPrime = alpha / (maxHop - 1);
+
+        // if (hop == maxHop - 1)
+        // return beta;
+
+        // return (maxHop - 1 - hop)
+        // * alphaPrime
+        // + beta;
     }
 
+    /**
+     * Mengambil seluruh chain transaksi
+     * untuk sebuah message
+     */
     public List<Payment> getChain(String msgId) {
         return chains.get(msgId);
     }
 
-    private DTNHost getDestination(String msgId) {
-        // optional mapping
-        return null;
+    public void registerDestination(String msgId, DTNHost dest) {
+
+        if (registry != null) {
+            registry.register(msgId, dest);
+        }
     }
 }

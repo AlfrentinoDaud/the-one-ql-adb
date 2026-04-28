@@ -1,50 +1,70 @@
 package Blockchain;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
- * Blockchain digunakan sebagai rantai utama yang tersimpan di Internet
+ * Class Blockchain mengelola seluruh block
+ * dalam sistem reward DTN.
+ * 
+ * Fungsi utama:
+ * - menyimpan block
+ * - menambahkan block baru
+ * - menjaga integritas chain
  */
 public class Blockchain {
 
     /**
-     * List berisi blok-blok yang telah ditambang
+     * List seluruh block dalam chain
      */
-    private List<Block> chain;
+    private List<Block> chain = new ArrayList<>();
 
     /**
-     * Target kesuitan para mining untuk menambang
+     * Difficulty mining
      */
-    private final int difficulty;
+    private int difficulty = 3;
 
-    public Blockchain(int difficulty) {
-        this.chain = new ArrayList<>();
-        this.difficulty = difficulty;
+    /**
+     * Constructor blockchain
+     * otomatis membuat genesis block
+     */
+    public Blockchain() {
+
+        chain.add(createGenesisBlock());
     }
 
     /**
-     * Ambil block terakhir di chain. Kalo kosong, return block kosong
-     * 
-     * @return objek blok paling terakhir
+     * Genesis block adalah block pertama
+     * dalam blockchain
+     */
+    private Block createGenesisBlock() {
+
+        return new Block(
+                "0",
+                new ArrayList<>());
+    }
+
+    /**
+     * Mengambil block terakhir
      */
     public Block getLatestBlock() {
-        if (chain.isEmpty()) {
-            return new Block();
-        }
+
         return chain.get(chain.size() - 1);
     }
 
     /**
-     * Menambahkahkan blok baru ke blockchain
-     * 
-     * @param newBlock Blok yang akan ditambah
+     * Menambahkan block baru ke chain
      */
-    public void addBlock(Block newBlock) {
-        chain.add(newBlock);
+    public void addBlock(Block block) {
+
+        block.mine(difficulty);
+
+        chain.add(block);
     }
 
-    public int chainSize() {
+    /**
+     * Mengambil jumlah block dalam chain
+     */
+    public int size() {
         return chain.size();
     }
 }
